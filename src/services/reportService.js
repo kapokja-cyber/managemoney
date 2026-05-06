@@ -1,23 +1,9 @@
-const { google } = require('googleapis');
 const ExcelJS = require('exceljs');
-
-const FOLDER_ID = '1xiNoy0UKKZ35wPbTfvnj4_ax4Bw2l4ua';
 
 const MONTHS_TH = [
   '', 'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
   'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม',
 ];
-
-function getAuthClient() {
-  const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
-  const auth = new google.auth.JWT(
-    credentials.client_email,
-    null,
-    credentials.private_key,
-    ['https://www.googleapis.com/auth/drive']
-  );
-  return auth;
-}
 
 async function generateExcelReport(rows, month, year) {
   const workbook = new ExcelJS.Workbook();
@@ -75,44 +61,4 @@ async function generateExcelReport(rows, month, year) {
   return workbook.xlsx.writeBuffer();
 }
 
-async function uploadToDrive(buffer, month, year) {
-  const auth = getAuthClient();
-  const drive = google.drive({ version: 'v3', auth });
-
-  const filename = `รายรับรายจ่าย-${MONTHS_TH[month]}-${year + 543}.xlsx`;
-  const { PassThrough } = require('stream');
-  const stream = new PassThrough();
-  stream.end(Buffer.from(buffer));
-
-  const response = await drive.files.create({
-    supportsAllDrives: true,
-    requestBody: {
-      name: filename,
-      parents: [FOLDER_ID],
-      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    },
-    media: {
-      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      body: stream,
-    },
-    fields: 'id, webViewLink',
-  });
-
-  // ตั้งค่าให้ทุกคนที่มี link เปิดได้
-  await drive.permissions.create({
-    supportsAllDrives: true,
-    fileId: response.data.id,
-    requestBody: {
-      role: 'reader',
-      type: 'anyone',
-    },
-  });
-
-  return {
-    fileId: response.data.id,
-    link: `https://drive.google.com/file/d/${response.data.id}/view`,
-    filename,
-  };
-}
-
-module.exports = { generateExcelReport, uploadToDrive };
+module.exports = { generateExcelReport, MONTHS_TH };

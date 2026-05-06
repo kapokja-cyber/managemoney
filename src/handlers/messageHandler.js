@@ -1,5 +1,6 @@
 const { parseExpenseMessage } = require('../services/geminiService');
 const { appendTransaction, getTransactions } = require('../services/transactionService');
+const { generateExcelReport, uploadToDrive } = require('../services/reportService');
 const {
   GENERAL_RESPONSES,
   generateConfirmQuickReply,
@@ -16,26 +17,23 @@ const { clearPending, getPending, setPending } = require('../state/pendingConfir
 
 const CONFIRM_YES = ['ใช่', 'yes', 'ใช่ครับ', 'ใช่ค่ะ', 'ตกลง', 'ok', 'โอเค', 'ได้', 'บันทึก', 'ถูก', 'ถูกต้อง', '✅', '👍'];
 const CONFIRM_NO = ['ไม่', 'no', 'ไม่ใช่', 'ไม่ถูก', 'ผิด', 'ยกเลิก', 'cancel', '❌', '👎'];
+const REPORT_KEYWORDS = ['ส่ง report', 'ส่งreport', 'report', 'รายงาน', 'ส่งรายงาน'];
 
 async function handleTextMessage(userId, userMessage) {
   const pendingReply = await handlePendingConfirmation(userId, userMessage);
   if (pendingReply) return pendingReply;
 
-  if (isGreeting(userMessage)) {
-    return GENERAL_RESPONSES.greeting;
+  if (isGreeting(userMessage)) return GENERAL_RESPONSES.greeting;
+  if (isHelpRequest(userMessage)) return GENERAL_RESPONSES.help;
+
+  // ตรวจสอบคำสั่ง report
+  const normalizedMsg = userMessage.toLowerCase().trim();
+  if (REPORT_KEYWORDS.some((kw) => normalizedMsg.includes(kw.toLowerCase()))) {
+    return buildReportReply(userId, userMessage);
   }
 
-  if (isHelpRequest(userMessage)) {
-    return GENERAL_RESPONSES.help;
-  }
-
-  if (isAnalysisRequest(userMessage)) {
-    return buildSummaryReply(userId, userMessage);
-  }
-
-  if (userMessage.length < 2) {
-    return GENERAL_RESPONSES.help;
-  }
+  if (isAnalysisRequest(userMessage)) return buildSummaryReply(userId, userMessage);
+  if (userMessage.length < 2) return GENERAL_RESPONSES.help;
 
   try {
     console.log(`📩 [${userId || 'unknown'}] "${userMessage}"`);
@@ -51,10 +49,7 @@ async function handleTextMessage(userId, userMessage) {
       return saveAndBuildReply(transactionData, userId);
     }
 
-    if (userId) {
-      setPending(userId, transactionData);
-    }
-
+    if (userId) setPending(userId, transactionData);
     return generateConfirmQuickReply(transactionData);
   } catch (error) {
     console.error('❌ Error handling message:', error);
@@ -62,24 +57,93 @@ async function handleTextMessage(userId, userMessage) {
   }
 }
 
+async function buildReportReply(userId, userMessage) {
+  try {
+    // ดึงข้อมูลเดือนนี้
+    const now = new Date();
+    const month = now.getMonth() + 1;
+    const year = now.getFullYear();
+    const dateFrom = `${year}-${String(month).padStart(2, '0')}-01`;
+    const lastDay = new Date(year, month, 0).getDate();
+    const dateTo = `${year}-${String(month).padStart(2, '0')}-${lastDay}`;
+
+    console.log(`📊 กำลังสร้าง report ${dateFrom} → ${dateTo}`);
+    const rows = await getTransactions(userId, dateFrom, dateTo);
+
+    if (!rows || rows.length === 0) {
+      return 'ไม่มีข้อมูลในเดือนนี้ครับ ลองบันทึกรายการก่อนนะครับ 😊';
+    }
+
+    const buffer = await generateExcelReport(rows, month, year);
+    const { link, filename } = await uploadToDrive(buffer, month, year);
+
+    const MONTHS_TH = ['', 'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+      'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม'];
+
+    const totalIncome = rows.filter(r => r.type === 'รายรับ').reduce((s, r) => s + parseFloat(r.amount), 0);
+    const totalExpense = rows.filter(r => r.type === 'รายจ่าย').reduce((s, r) => s + parseFloat(r.amount), 0);
+
+    return {
+      type: 'flex',
+      altText: `รายงานเดือน${MONTHS_TH[month]} พร้อมแล้วครับ`,
+      contents: {
+        type: 'bubble',
+        header: {
+          type: 'box',
+          layout: 'vertical',
+          contents: [{
+            type: 'text',
+            text: `📊 รายงานเดือน${MONTHS_TH[month]} ${year + 543}`,
+            weight: 'bold',
+            color: '#FFFFFF',
+            size: 'md',
+          }],
+          backgroundColor: '#2196F3',
+          paddingAll: '15px',
+        },
+        body: {
+          type: 'box',
+          layout: 'vertical',
+          contents: [
+            { type: 'text', text: `รายรับรวม: ${totalIncome.toLocaleString()} บาท`, color: '#2E7D32', weight: 'bold', size: 'sm' },
+            { type: 'text', text: `รายจ่ายรวม: ${totalExpense.toLocaleString()} บาท`, color: '#C62828', weight: 'bold', size: 'sm', margin: 'sm' },
+            { type: 'text', text: `คงเหลือ: ${(totalIncome - totalExpense).toLocaleString()} บาท`, weight: 'bold', size: 'sm', margin: 'sm' },
+            { type: 'text', text: `จำนวน ${rows.length} รายการ`, color: '#888888', size: 'xs', margin: 'md' },
+          ],
+          paddingAll: '15px',
+        },
+        footer: {
+          type: 'box',
+          layout: 'vertical',
+          contents: [{
+            type: 'button',
+            action: { type: 'uri', label: '📥 ดาวน์โหลด Excel', uri: link },
+            style: 'primary',
+            color: '#2196F3',
+          }],
+          paddingAll: '10px',
+        },
+      },
+    };
+  } catch (error) {
+    console.error('❌ Report error:', error);
+    return 'เกิดข้อผิดพลาดในการสร้างรายงานครับ กรุณาลองใหม่อีกครั้ง';
+  }
+}
+
 async function handlePendingConfirmation(userId, userMessage) {
   if (!userId) return null;
-
   const pendingData = getPending(userId);
   if (!pendingData) return null;
-
   const normalizedMessage = userMessage.toLowerCase().trim();
-
   if (CONFIRM_YES.some((word) => normalizedMessage === word)) {
     clearPending(userId);
     return saveAndBuildReply(pendingData, userId);
   }
-
   if (CONFIRM_NO.some((word) => normalizedMessage === word)) {
     clearPending(userId);
     return 'ยกเลิกแล้วครับ ถ้าจะบันทึกใหม่ พิมพ์รายการมาได้เลย';
   }
-
   clearPending(userId);
   return null;
 }
@@ -87,11 +151,8 @@ async function handlePendingConfirmation(userId, userMessage) {
 async function buildSummaryReply(userId, userMessage) {
   try {
     const { dateFrom, dateTo, label } = parseSummaryPeriod(userMessage);
-    console.log(`📊 วิเคราะห์ ${label}: ${dateFrom} → ${dateTo}`);
-
     const rows = await getTransactions(userId, dateFrom, dateTo);
     if (rows === null) return GENERAL_RESPONSES.error;
-
     return generateFlexSummary(rows, label) || GENERAL_RESPONSES.noData;
   } catch (error) {
     console.error('❌ Analysis error:', error);
@@ -101,10 +162,7 @@ async function buildSummaryReply(userId, userMessage) {
 
 async function saveAndBuildReply(transactionData, userId) {
   const result = await appendTransaction(transactionData, userId);
-  if (result.success) {
-    return generateTransactionFlex(transactionData);
-  }
-
+  if (result.success) return generateTransactionFlex(transactionData);
   console.error('❌ บันทึกไม่สำเร็จ:', result.error);
   return GENERAL_RESPONSES.error;
 }
@@ -119,6 +177,4 @@ function toTransactionData(parsed) {
   };
 }
 
-module.exports = {
-  handleTextMessage,
-};
+module.exports = { handleTextMessage };

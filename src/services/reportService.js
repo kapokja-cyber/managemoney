@@ -88,7 +88,8 @@ async function uploadToDrive(buffer, month, year) {
   const { Readable } = require('stream');
   const stream = Readable.from(buffer);
 
-  const response = await drive.files.create({
+ const response = await drive.files.create({
+    supportsAllDrives: true,
     requestBody: {
       name: filename,
       parents: [FOLDER_ID],
@@ -98,6 +99,7 @@ async function uploadToDrive(buffer, month, year) {
       mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       body: stream,
     },
+    supportsAllDrives: true,
     fields: 'id, webViewLink',
   });
 

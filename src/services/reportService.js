@@ -10,17 +10,19 @@ const MONTHS_TH = [
 
 function getAuthClient() {
   const credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
-  return new google.auth.GoogleAuth({
-    credentials,
-    scopes: ['https://www.googleapis.com/auth/drive'],
-  });
+  const auth = new google.auth.JWT(
+    credentials.client_email,
+    null,
+    credentials.private_key,
+    ['https://www.googleapis.com/auth/drive']
+  );
+  return auth;
 }
 
 async function generateExcelReport(rows, month, year) {
   const workbook = new ExcelJS.Workbook();
   const sheet = workbook.addWorksheet('รายรับรายจ่าย');
 
-  // หัวตาราง
   sheet.columns = [
     { header: 'วันที่', key: 'date', width: 15 },
     { header: 'รายการ', key: 'item', width: 25 },
@@ -29,14 +31,12 @@ async function generateExcelReport(rows, month, year) {
     { header: 'จำนวนเงิน (บาท)', key: 'amount', width: 18 },
   ];
 
-  // Style หัวตาราง
   sheet.getRow(1).eachCell((cell) => {
     cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2196F3' } };
     cell.alignment = { horizontal: 'center' };
   });
 
-  // ใส่ข้อมูล
   let totalIncome = 0;
   let totalExpense = 0;
 
@@ -53,17 +53,12 @@ async function generateExcelReport(rows, month, year) {
       amount: amount,
     });
 
-    // สีตามประเภท
     addedRow.getCell('amount').font = {
       color: { argb: row.type === 'รายรับ' ? 'FF2E7D32' : 'FFC62828' },
       bold: true,
     };
-    addedRow.getCell('type').font = {
-      color: { argb: row.type === 'รายรับ' ? 'FF2E7D32' : 'FFC62828' },
-    };
   });
 
-  // บรรทัดสรุป
   sheet.addRow({});
   const incomeRow = sheet.addRow({ item: 'รวมรายรับ', amount: totalIncome });
   incomeRow.getCell('amount').font = { bold: true, color: { argb: 'FF2E7D32' } };
@@ -85,10 +80,11 @@ async function uploadToDrive(buffer, month, year) {
   const drive = google.drive({ version: 'v3', auth });
 
   const filename = `รายรับรายจ่าย-${MONTHS_TH[month]}-${year + 543}.xlsx`;
-  const { Readable } = require('stream');
-  const stream = Readable.from(buffer);
+  const { PassThrough } = require('stream');
+  const stream = new PassThrough();
+  stream.end(Buffer.from(buffer));
 
- const response = await drive.files.create({
+  const response = await drive.files.create({
     supportsAllDrives: true,
     requestBody: {
       name: filename,
@@ -99,13 +95,22 @@ async function uploadToDrive(buffer, month, year) {
       mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       body: stream,
     },
-    supportsAllDrives: true,
     fields: 'id, webViewLink',
+  });
+
+  // ตั้งค่าให้ทุกคนที่มี link เปิดได้
+  await drive.permissions.create({
+    supportsAllDrives: true,
+    fileId: response.data.id,
+    requestBody: {
+      role: 'reader',
+      type: 'anyone',
+    },
   });
 
   return {
     fileId: response.data.id,
-    link: response.data.webViewLink,
+    link: `https://drive.google.com/file/d/${response.data.id}/view`,
     filename,
   };
 }

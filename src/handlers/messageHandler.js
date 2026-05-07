@@ -176,10 +176,10 @@ async function saveAndBuildReply(transactionData, userId) {
 }
 
 function toTransactionData(parsed) {
-  const now = new Date();
-  const pad = n => String(n).padStart(2, '0');
-  const timeStr = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
-
+ const now = new Date();
+const pad = n => String(n).padStart(2, '0');
+const thailandTime = new Date(now.getTime() + 7 * 60 * 60 * 1000);
+const timeStr = `${pad(thailandTime.getUTCHours())}:${pad(thailandTime.getUTCMinutes())}`;
   return {
     item: parsed.item,
     amount: parsed.amount,

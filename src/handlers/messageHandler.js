@@ -191,4 +191,6 @@ const timeStr = `${pad(thailandTime.getUTCHours())}:${pad(thailandTime.getUTCMin
 }
 module.exports = {
   handleTextMessage,
+  reportCache,
+};
 };

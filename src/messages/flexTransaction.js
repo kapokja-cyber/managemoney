@@ -68,7 +68,7 @@ function makeDetailRow(label, value) {
 }
 
 function generateTransactionFlex(data) {
-  const { item, amount, category, type, date } = data;
+const { item, amount, category, type, date, time } = data;
   const theme = THEME[type] || THEME['รายจ่าย'];
   const categoryText = `${CATEGORY_EMOJI[category] || '📌'} ${category}`;
   const comment = getCategoryComment(category);
@@ -133,6 +133,7 @@ function generateTransactionFlex(data) {
           makeDetailRow('รายการ', item),
           makeDetailRow('หมวด', categoryText),
           makeDetailRow('วันที่', date),
+          makeDetailRow('เวลา', time || ''),
           {
             type: 'box',
             layout: 'vertical',

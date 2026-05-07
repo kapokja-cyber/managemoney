@@ -110,15 +110,19 @@ async function saveAndBuildReply(transactionData, userId) {
 }
 
 function toTransactionData(parsed) {
+  const now = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const timeStr = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
+
   return {
     item: parsed.item,
     amount: parsed.amount,
     category: parsed.category,
     type: parsed.type,
     date: parsed.date,
+    time: timeStr,
   };
 }
-
 module.exports = {
   handleTextMessage,
 };

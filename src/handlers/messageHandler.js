@@ -1,4 +1,4 @@
-const { parseExpenseMessage } = require('../services/geminiService');
+const { parseExpenseMessage, parseImageMessage } = require('../services/geminiService');
 const { appendTransaction, getTransactions } = require('../services/transactionService');
 const { generateExcelReport, MONTHS_TH } = require('../services/reportService');
 const {
@@ -189,8 +189,48 @@ const timeStr = `${pad(thailandTime.getUTCHours())}:${pad(thailandTime.getUTCMin
     time: timeStr,
   };
 }
+/**
+ * รับ image message (slip/ใบเสร็จ) จาก LINE
+ * ส่งให้ Gemini Vision วิเคราะห์แล้วบันทึก transaction
+ */
+async function handleImageMessage(userId, messageId, lineAccessToken) {
+  try {
+    console.log(`🖼️ [${userId || 'unknown'}] รับรูปภาพ messageId: ${messageId}`);
+
+    // ส่งให้ Gemini Vision อ่าน slip
+    const parsed = await parseImageMessage(messageId, lineAccessToken);
+    console.log('🤖 Gemini Vision:', JSON.stringify(parsed));
+
+    // ถ้าอ่านไม่ได้เลย (ทั้ง amount และ item หาย)
+    if (parsed.missing_fields && parsed.missing_fields.includes('amount') && parsed.confidence < 0.4) {
+      return 'อ่าน slip ไม่ได้ครับ ลองพิมพ์รายการแทนได้เลย เช่น "โอนค่าอาหาร 150"';
+    }
+
+    // ถ้ายังขาด fields
+    if (parsed.missing_fields && parsed.missing_fields.length > 0) {
+      return generateMissingFieldReply(parsed.missing_fields, parsed);
+    }
+
+    const transactionData = toTransactionData(parsed);
+
+    // slip มักชัดเจน → auto save ถ้า confidence สูง
+    if (parsed.confidence >= 0.75) {
+      return saveAndBuildReply(transactionData, userId);
+    }
+
+    // ถ้ายังไม่แน่ใจ → ถามยืนยัน
+    if (userId) setPending(userId, transactionData);
+    return generateConfirmQuickReply(transactionData);
+
+  } catch (error) {
+    console.error('❌ Error handling image:', error);
+    return 'เกิดข้อผิดพลาดในการอ่านรูปครับ ลองพิมพ์รายการแทนได้เลย';
+  }
+}
+
 module.exports = {
   handleTextMessage,
+  handleImageMessage,
   reportCache,
 };
 

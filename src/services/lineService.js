@@ -1,10 +1,11 @@
 /**
  * LINE Service
  * รับ event จาก LINE แล้วส่งต่อให้ message handler
+ * รองรับ text และ image (slip/ใบเสร็จ)
  */
 const line = require('@line/bot-sdk');
 const { config } = require('../config');
-const { handleTextMessage } = require('../handlers/messageHandler');
+const { handleTextMessage, handleImageMessage } = require('../handlers/messageHandler');
 const { GENERAL_RESPONSES } = require('../messages');
 
 const lineClient = new line.messagingApi.MessagingApiClient({
@@ -14,15 +15,24 @@ const lineClient = new line.messagingApi.MessagingApiClient({
 async function handleEvent(event) {
   if (event.type !== 'message') return null;
 
-  if (event.message.type !== 'text') {
-    return replyPayload(event.replyToken, GENERAL_RESPONSES.notText);
+  const userId = event.source?.userId || null;
+
+  // ─── รับ text message ───────────────────────────────
+  if (event.message.type === 'text') {
+    const userMessage = event.message.text.trim();
+    const payload = await handleTextMessage(userId, userMessage);
+    return replyPayload(event.replyToken, payload);
   }
 
-  const userId = event.source?.userId || null;
-  const userMessage = event.message.text.trim();
-  const payload = await handleTextMessage(userId, userMessage);
+  // ─── รับ image message (slip/ใบเสร็จ) ───────────────
+  if (event.message.type === 'image') {
+    const messageId = event.message.id;
+    const payload = await handleImageMessage(userId, messageId, config.line.channelAccessToken);
+    return replyPayload(event.replyToken, payload);
+  }
 
-  return replyPayload(event.replyToken, payload);
+  // ─── ประเภทอื่นๆ ────────────────────────────────────
+  return replyPayload(event.replyToken, GENERAL_RESPONSES.notText);
 }
 
 async function replyPayload(replyToken, payload) {

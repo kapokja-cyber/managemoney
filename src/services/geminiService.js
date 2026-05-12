@@ -19,11 +19,10 @@ const model = genAI.getGenerativeModel(
   {
     model: config.gemini.model,
     generationConfig: {
-      responseMimeType: 'application/json',
       temperature: 0.15,
     },
   },
-  { apiVersion: 'v1' }  // ใช้ v1 แทน v1beta เพื่อรองรับ gemini-1.5-flash
+  { apiVersion: 'v1' }
 );
 
 /**

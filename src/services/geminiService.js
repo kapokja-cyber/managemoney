@@ -42,7 +42,7 @@ async function parseExpenseMessage(userMessage) {
     });
 
     const responseText = result.response.text();
-    const parsed = JSON.parse(responseText);
+    const parsed = JSON.parse(stripMarkdown(responseText));
 
     // ─── Validate & Sanitize ──────────────────────────
     return sanitizeResult(parsed, userMessage);
@@ -218,7 +218,7 @@ async function parseImageMessage(messageId, lineAccessToken) {
     });
 
     const responseText = result.response.text();
-    const parsed = JSON.parse(responseText);
+    const parsed = JSON.parse(stripMarkdown(responseText));
 
     // sanitize เหมือน text message
     const sanitized = sanitizeResult(parsed, parsed.item || 'จากรูปภาพ');
@@ -243,6 +243,17 @@ async function parseImageMessage(messageId, lineAccessToken) {
       reply_hint: 'อ่านรูปไม่สำเร็จ',
     };
   }
+}
+
+/**
+ * Strip markdown code block จาก Gemini response
+ * เช่น ```json { ... } ``` → { ... }
+ */
+function stripMarkdown(text) {
+  return text
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim();
 }
 
 module.exports = { parseExpenseMessage, parseImageMessage };

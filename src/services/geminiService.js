@@ -15,13 +15,16 @@ const { cleanTransactionItem, extractAmount, parseAmountValue } = require('../ut
 // ─── Initialize Gemini ─────────────────────────────────
 const genAI = new GoogleGenerativeAI(config.gemini.apiKey);
 
-const model = genAI.getGenerativeModel({
-  model: config.gemini.model,
-  generationConfig: {
-    responseMimeType: 'application/json',
-    temperature: 0.15, // ยัง deterministic แต่ยืดหยุ่นขึ้นเล็กน้อยกับภาษาไทยธรรมชาติ
+const model = genAI.getGenerativeModel(
+  {
+    model: config.gemini.model,
+    generationConfig: {
+      responseMimeType: 'application/json',
+      temperature: 0.15,
+    },
   },
-});
+  { apiVersion: 'v1' }  // ใช้ v1 แทน v1beta เพื่อรองรับ gemini-1.5-flash
+);
 
 /**
  * ส่งข้อความให้ Gemini AI วิเคราะห์

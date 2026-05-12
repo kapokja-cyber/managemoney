@@ -15,15 +15,12 @@ const { cleanTransactionItem, extractAmount, parseAmountValue } = require('../ut
 // ─── Initialize Gemini ─────────────────────────────────
 const genAI = new GoogleGenerativeAI(config.gemini.apiKey);
 
-const model = genAI.getGenerativeModel(
-  {
-    model: config.gemini.model,
-    generationConfig: {
-      temperature: 0.15,
-    },
+const model = genAI.getGenerativeModel({
+  model: config.gemini.model,
+  generationConfig: {
+    temperature: 0.15,
   },
-  { apiVersion: 'v1' }
-);
+});
 
 /**
  * ส่งข้อความให้ Gemini AI วิเคราะห์
